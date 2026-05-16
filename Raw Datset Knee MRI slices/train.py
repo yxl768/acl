@@ -124,8 +124,9 @@ def get_model():
 # --- 3. 工具函数 ---
 def parse_args():
     parser = argparse.ArgumentParser(description="ACL MRI 单通道分割训练脚本")
-    parser.add_argument("--img_dir", type=str, default=r"D:\ACL\Raw Datset Knee MRI slices\images")
-    parser.add_argument("--mask_dir", type=str, default=r"D:\ACL\Raw Datset Knee MRI slices\masks")
+    base_dir = Path(__file__).resolve().parent
+    parser.add_argument("--img_dir", type=str, default=str(base_dir / "images"))
+    parser.add_argument("--mask_dir", type=str, default=str(base_dir / "masks"))
     parser.add_argument("--image_size", type=int, default=64)
     parser.add_argument("--batch_size", type=int, default=4)
     parser.add_argument("--epochs", type=int, default=5)
@@ -271,11 +272,11 @@ def limit_datasets(train_dataset: Dataset, val_dataset: Dataset, test_dataset: D
 
 def plot_history(history: dict, save_path: str):
     plt.figure(figsize=(10, 5))
-    plt.plot(history["train_loss"], label="训练损失", marker="o")
-    plt.plot(history["val_loss"], label="验证损失", marker="o")
-    plt.xlabel("训练轮次")
-    plt.ylabel("损失")
-    plt.title("训练/验证损失曲线")
+    plt.plot(history["train_loss"], label="Train Loss", marker="o")
+    plt.plot(history["val_loss"], label="Val Loss", marker="o")
+    plt.xlabel("Epoch")
+    plt.ylabel("Loss")
+    plt.title("Training / Validation Loss Curve")
     plt.legend()
     plt.grid(True)
     plt.savefig(save_path)
@@ -284,13 +285,13 @@ def plot_history(history: dict, save_path: str):
 
 def plot_metric_curves(history: dict, save_path: str):
     plt.figure(figsize=(12, 5))
-    plt.plot(history["train_iou"], label="训练 IoU", marker="o")
-    plt.plot(history["val_iou"], label="验证 IoU", marker="o")
-    plt.plot(history["train_f1"], label="训练 F1", marker="o")
-    plt.plot(history["val_f1"], label="验证 F1", marker="o")
-    plt.xlabel("训练轮次")
-    plt.ylabel("评分")
-    plt.title("IoU / F1 曲线")
+    plt.plot(history["train_iou"], label="Train IoU", marker="o")
+    plt.plot(history["val_iou"], label="Val IoU", marker="o")
+    plt.plot(history["train_f1"], label="Train F1", marker="o")
+    plt.plot(history["val_f1"], label="Val F1", marker="o")
+    plt.xlabel("Epoch")
+    plt.ylabel("Score")
+    plt.title("IoU / F1 Score Curve")
     plt.legend()
     plt.grid(True)
     plt.savefig(save_path)
@@ -298,15 +299,16 @@ def plot_metric_curves(history: dict, save_path: str):
 
 
 def plot_confusion_matrix(confusion: np.ndarray, save_path: str):
-    labels = ["背景", "ACL"]
+    labels = ["Background", "ACL"]
     fig, ax = plt.subplots(figsize=(5, 5))
     im = ax.imshow(confusion, cmap="Blues")
     ax.set_xticks(np.arange(len(labels)))
     ax.set_yticks(np.arange(len(labels)))
     ax.set_xticklabels(labels)
     ax.set_yticklabels(labels)
-    ax.set_xlabel("预测")
-    ax.set_ylabel("真实")
+    ax.set_xlabel("Predicted Label")
+    ax.set_ylabel("True Label")
+    ax.set_title("Confusion Matrix")
     for i in range(confusion.shape[0]):
         for j in range(confusion.shape[1]):
             ax.text(j, i, int(confusion[i, j]), ha="center", va="center", color="black")
