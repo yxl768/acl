@@ -6,8 +6,7 @@ import sys
 import typing
 from pathlib import Path
 import numpy as np
-
-# 这里引入 sys 是为了在 windows 终端启用 utf-8 输出，避免中文显示乱码
+# 引入 sys 是为了在 windows 终端启用 utf-8 输出，避免中文显示乱码
 
 typing.OrderedDict = collections.OrderedDict
 
@@ -19,7 +18,7 @@ from torchvision import transforms
 from PIL import Image
 from tqdm import tqdm
 
-# --- 1. 数据集定义 ---
+#1.数据集定义
 class ACLDataset(Dataset):
     def __init__(self, img_dir, mask_dir, image_transform=None, mask_transform=None):
         self.img_dir = Path(img_dir)
@@ -30,10 +29,10 @@ class ACLDataset(Dataset):
         image_files = set(f.name for f in self.img_dir.iterdir() if f.is_file())
         mask_files = set(f.name for f in self.mask_dir.iterdir() if f.is_file())
         self.images = sorted(list(image_files.intersection(mask_files)))
-
+#提前检查数据是否有效
         if len(self.images) == 0:
             raise FileNotFoundError(
-                "错误：没找到对应的图片和掩码文件，请检查路径！"
+                "没找到对应的图片和掩码文件，请检查路径"
             )
 
     def __len__(self):
@@ -55,8 +54,7 @@ class ACLDataset(Dataset):
         mask = (mask > 0.5).float()
         return image, mask
 
-
-# --- 2. 模型定义 ---
+#2.模型定义
 class ConvBlock(nn.Module):
     def __init__(self, in_channels, out_channels, dropout=0.1):
         super().__init__()
@@ -74,7 +72,6 @@ class ConvBlock(nn.Module):
     def forward(self, x):
         return self.block(x)
 
-
 class UpBlock(nn.Module):
     def __init__(self, in_channels, out_channels, dropout=0.1):
         super().__init__()
@@ -85,7 +82,6 @@ class UpBlock(nn.Module):
         x = self.up(x)
         x = torch.cat([x, skip], dim=1)
         return self.conv(x)
-
 
 class StandardUNet(nn.Module):
     def __init__(self, in_channels=1, base_filters=16, dropout=0.1):
@@ -116,12 +112,10 @@ class StandardUNet(nn.Module):
         x = self.up4(x, x1)
         return torch.sigmoid(self.out_conv(x))
 
-
 def get_model():
     return StandardUNet()
 
-
-# --- 3. 工具函数 ---
+#3.工具函数
 def parse_args():
     parser = argparse.ArgumentParser(description="ACL MRI 单通道分割训练脚本")
     base_dir = Path(__file__).resolve().parent
@@ -142,14 +136,12 @@ def parse_args():
     parser.add_argument("--use_amp", action="store_true")
     return parser.parse_args()
 
-
 def fix_seed(seed: int):
     random.seed(seed)
     torch.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
-
 
 def get_transforms(image_size: int, augment: bool = False):
     train_transforms = [
@@ -173,7 +165,6 @@ def get_transforms(image_size: int, augment: bool = False):
         transforms.ToTensor(),
     ])
     return image_transform, mask_transform
-
 
 def get_binary_metrics(preds: torch.Tensor, targets: torch.Tensor, eps: float = 1e-6):
     preds = (preds > 0.5).float()
@@ -212,7 +203,6 @@ class DiceLoss(nn.Module):
         dice_score = ((2.0 * intersection + self.eps) / (union + self.eps)).mean()
         return 1.0 - dice_score
 
-
 class ComboLoss(nn.Module):
     def __init__(self, bce_weight: float = 0.5, dice_weight: float = 0.5):
         super().__init__()
@@ -223,7 +213,6 @@ class ComboLoss(nn.Module):
 
     def forward(self, preds: torch.Tensor, targets: torch.Tensor):
         return self.bce_weight * self.bce(preds, targets) + self.dice_weight * self.dice(preds, targets)
-
 
 def split_dataset(dataset: Dataset, val_split: float, test_split: float, seed: int):
     if val_split + test_split >= 1.0:
@@ -249,7 +238,6 @@ def split_dataset(dataset: Dataset, val_split: float, test_split: float, seed: i
         test_dataset = None
     return train_dataset, val_dataset, test_dataset
 
-
 def limit_dataset_subset(dataset: Dataset, max_len: int):
     if len(dataset) <= max_len:
         return dataset
@@ -268,7 +256,6 @@ def limit_datasets(train_dataset: Dataset, val_dataset: Dataset, test_dataset: D
     if test_dataset is not None:
         test_dataset = limit_dataset_subset(test_dataset, 200)
     return train_dataset, val_dataset, test_dataset
-
 
 def plot_history(history: dict, save_path: str):
     plt.figure(figsize=(10, 5))
@@ -328,18 +315,21 @@ def save_metrics_csv(history: dict, csv_path: str):
         "train_precision",
         "train_recall",
         "train_f1",
+        "train_accuracy",
         "val_loss",
         "val_dice",
         "val_iou",
         "val_precision",
         "val_recall",
         "val_f1",
+        "val_accuracy",
         "test_loss",
         "test_dice",
         "test_iou",
         "test_precision",
         "test_recall",
         "test_f1",
+        "test_accuracy",
     ]
     with open(csv_path, "w", newline="", encoding="utf-8") as csvfile:
         writer = csv.writer(csvfile)
@@ -353,18 +343,21 @@ def save_metrics_csv(history: dict, csv_path: str):
                 history.get("train_precision", [None])[epoch] if history.get("train_precision") else None,
                 history.get("train_recall", [None])[epoch] if history.get("train_recall") else None,
                 history.get("train_f1", [None])[epoch] if history.get("train_f1") else None,
+                history.get("train_accuracy", [None])[epoch] if history.get("train_accuracy") else None,
                 history.get("val_loss", [None])[epoch] if history.get("val_loss") else None,
                 history.get("val_dice", [None])[epoch] if history.get("val_dice") else None,
                 history.get("val_iou", [None])[epoch] if history.get("val_iou") else None,
                 history.get("val_precision", [None])[epoch] if history.get("val_precision") else None,
                 history.get("val_recall", [None])[epoch] if history.get("val_recall") else None,
                 history.get("val_f1", [None])[epoch] if history.get("val_f1") else None,
+                history.get("val_accuracy", [None])[epoch] if history.get("val_accuracy") else None,
                 history.get("test_loss", [None])[epoch] if history.get("test_loss") else None,
                 history.get("test_dice", [None])[epoch] if history.get("test_dice") else None,
                 history.get("test_iou", [None])[epoch] if history.get("test_iou") else None,
                 history.get("test_precision", [None])[epoch] if history.get("test_precision") else None,
                 history.get("test_recall", [None])[epoch] if history.get("test_recall") else None,
                 history.get("test_f1", [None])[epoch] if history.get("test_f1") else None,
+                history.get("test_accuracy", [None])[epoch] if history.get("test_accuracy") else None,
             ])
 
 
@@ -419,6 +412,7 @@ def train_epoch(model, loader, criterion, optimizer, device, scaler=None, epoch=
         "precision": 0.0,
         "recall": 0.0,
         "f1": 0.0,
+        "accuracy": 0.0,
     }
     data_iter = tqdm(
         loader,
@@ -465,6 +459,7 @@ def evaluate_epoch(model, loader, criterion, device, phase="Val"):
         "precision": 0.0,
         "recall": 0.0,
         "f1": 0.0,
+        "accuracy": 0.0,
     }
     confusion = np.zeros((2, 2), dtype=int)
     with torch.no_grad():
@@ -503,8 +498,7 @@ def save_checkpoint(model, path: str):
 def load_checkpoint(model, path: str, device: torch.device):
     model.load_state_dict(torch.load(path, map_location=device))
 
-
-# --- 4. 运行主程序 ---
+#4.运行主程序 
 if __name__ == "__main__":
     args = parse_args()
     fix_seed(args.seed)
@@ -564,12 +558,14 @@ if __name__ == "__main__":
         "train_precision": [],
         "train_recall": [],
         "train_f1": [],
+        "train_accuracy": [],
         "val_loss": [],
         "val_dice": [],
         "val_iou": [],
         "val_precision": [],
         "val_recall": [],
         "val_f1": [],
+        "val_accuracy": [],
     }
     best_val_loss = float("inf")
     best_model_path = None
@@ -583,6 +579,7 @@ if __name__ == "__main__":
         history["train_precision"].append(train_metrics["precision"])
         history["train_recall"].append(train_metrics["recall"])
         history["train_f1"].append(train_metrics["f1"])
+        history["train_accuracy"].append(train_metrics["accuracy"])
 
         val_loss, val_metrics, _ = evaluate_epoch(model, val_loader, criterion, device, phase="Val")
         history["val_loss"].append(val_loss)
@@ -591,10 +588,12 @@ if __name__ == "__main__":
         history["val_precision"].append(val_metrics["precision"])
         history["val_recall"].append(val_metrics["recall"])
         history["val_f1"].append(val_metrics["f1"])
+        history["val_accuracy"].append(val_metrics["accuracy"])
 
         print(
             f"Epoch {epoch}/{args.epochs} | Train Loss: {train_loss:.4f} | Val Loss: {val_loss:.4f} | "
             f"Train Dice: {train_metrics['dice']:.4f} | Val Dice: {val_metrics['dice']:.4f} | "
+            f"Train Acc: {train_metrics['accuracy']:.4f} | Val Acc: {val_metrics['accuracy']:.4f} | "
             f"Val IoU: {val_metrics['iou']:.4f} | Val F1: {val_metrics['f1']:.4f}"
         )
 
@@ -637,12 +636,14 @@ if __name__ == "__main__":
         history["test_precision"] = [None] * len(history["train_loss"])
         history["test_recall"] = [None] * len(history["train_loss"])
         history["test_f1"] = [None] * len(history["train_loss"])
+        history["test_accuracy"] = [None] * len(history["train_loss"])
         history["test_loss"][-1] = test_loss
         history["test_dice"][-1] = test_metrics["dice"]
         history["test_iou"][-1] = test_metrics["iou"]
         history["test_precision"][-1] = test_metrics["precision"]
         history["test_recall"][-1] = test_metrics["recall"]
         history["test_f1"][-1] = test_metrics["f1"]
+        history["test_accuracy"][-1] = test_metrics["accuracy"]
 
     save_metrics_csv(history, str(output_dir / "training_metrics.csv"))
     print(f"训练指标已保存到 {output_dir / 'training_metrics.csv'}")
