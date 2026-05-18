@@ -6,7 +6,6 @@ import sys
 import typing
 from pathlib import Path
 import numpy as np
-# 引入 sys 是为了在 windows 终端启用 utf-8 输出，避免中文显示乱码
 
 typing.OrderedDict = collections.OrderedDict
 
@@ -18,18 +17,15 @@ from torchvision import transforms
 from PIL import Image
 from tqdm import tqdm
 
-#1.数据集定义
 class ACLDataset(Dataset):
     def __init__(self, img_dir, mask_dir, image_transform=None, mask_transform=None):
         self.img_dir = Path(img_dir)
         self.mask_dir = Path(mask_dir)
         self.image_transform = image_transform
         self.mask_transform = mask_transform
-
         image_files = set(f.name for f in self.img_dir.iterdir() if f.is_file())
         mask_files = set(f.name for f in self.mask_dir.iterdir() if f.is_file())
         self.images = sorted(list(image_files.intersection(mask_files)))
-#提前检查数据是否有效
         if len(self.images) == 0:
             raise FileNotFoundError(
                 "没找到对应的图片和掩码文件，请检查路径"
@@ -42,19 +38,41 @@ class ACLDataset(Dataset):
         img_path = self.img_dir / self.images[idx]
         mask_path = self.mask_dir / self.images[idx]
 
+        # ===== screenshot start: 数据加载 =====
+        # 数据加载
         image = Image.open(img_path).convert("L")
         mask = Image.open(mask_path).convert("L")
+        # ===== screenshot end: 数据加载 =====
 
+        # ===== screenshot start: 数据增强 =====
+        # 数据增强
         if self.image_transform:
             image = self.image_transform(image)
+        # ===== screenshot end: 数据增强 =====
 
+        # ===== screenshot start: 掩码预处理 =====
+        # 掩码预处理
         if self.mask_transform:
             mask = self.mask_transform(mask)
+        # ===== screenshot end: 掩码预处理 =====
 
+        # ===== screenshot start: 二值化 =====
+        # 二值化
         mask = (mask > 0.5).float()
+        # ===== screenshot end: 二值化 =====
         return image, mask
 
-#2.模型定义
+# ===== screenshot start: 模型设计 =====
+# 模型设计
+# ===== screenshot start: 模型架构 =====
+# 模型架构
+# ===== screenshot end: 模型架构 =====
+# ===== screenshot start: 输入设计 =====
+# 输入设计
+# ===== screenshot end: 输入设计 =====
+# ===== screenshot start: 输出设计 =====
+# 输出设计
+# ===== screenshot end: 输出设计 =====
 class ConvBlock(nn.Module):
     def __init__(self, in_channels, out_channels, dropout=0.1):
         super().__init__()
@@ -86,6 +104,9 @@ class UpBlock(nn.Module):
 class StandardUNet(nn.Module):
     def __init__(self, in_channels=1, base_filters=16, dropout=0.1):
         super().__init__()
+        # ===== screenshot start: 超参数设置 =====
+        # 超参数设置
+        # ===== screenshot end: 超参数设置 =====
         self.inc = ConvBlock(in_channels, base_filters, dropout)
         self.down1 = nn.Sequential(nn.MaxPool2d(2), ConvBlock(base_filters, base_filters * 2, dropout))
         self.down2 = nn.Sequential(nn.MaxPool2d(2), ConvBlock(base_filters * 2, base_filters * 4, dropout))
@@ -115,7 +136,8 @@ class StandardUNet(nn.Module):
 def get_model():
     return StandardUNet()
 
-#3.工具函数
+# ===== screenshot end: 模型设计 =====
+
 def parse_args():
     parser = argparse.ArgumentParser(description="ACL MRI 单通道分割训练脚本")
     base_dir = Path(__file__).resolve().parent
@@ -144,6 +166,7 @@ def fix_seed(seed: int):
     torch.backends.cudnn.benchmark = False
 
 def get_transforms(image_size: int, augment: bool = False):
+    # 数据预处理
     train_transforms = [
         transforms.Resize((image_size, image_size)),
         transforms.RandomHorizontalFlip(0.5),
@@ -158,6 +181,7 @@ def get_transforms(image_size: int, augment: bool = False):
         transforms.Normalize([0.5], [0.5]),
     ]
     image_transform = transforms.Compose(train_transforms if augment else eval_transforms)
+
     mask_transform = transforms.Compose([
         transforms.Resize(
             (image_size, image_size), interpolation=transforms.InterpolationMode.NEAREST
@@ -165,6 +189,12 @@ def get_transforms(image_size: int, augment: bool = False):
         transforms.ToTensor(),
     ])
     return image_transform, mask_transform
+
+# ===== screenshot end: 数据预处理 =====
+
+# ===== screenshot start: 评价指标体系选型逻辑 =====
+# 评价指标体系选型逻辑
+# ===== screenshot end: 评价指标体系选型逻辑 =====
 
 def get_binary_metrics(preds: torch.Tensor, targets: torch.Tensor, eps: float = 1e-6):
     preds = (preds > 0.5).float()
@@ -203,6 +233,11 @@ class DiceLoss(nn.Module):
         dice_score = ((2.0 * intersection + self.eps) / (union + self.eps)).mean()
         return 1.0 - dice_score
 
+# ===== screenshot start: 优化器设计 =====
+# 优化器设计
+# ===== screenshot end: 优化器设计 =====
+# ===== screenshot start: 损失函数设计 =====
+# 损失函数设计
 class ComboLoss(nn.Module):
     def __init__(self, bce_weight: float = 0.5, dice_weight: float = 0.5):
         super().__init__()
@@ -213,7 +248,11 @@ class ComboLoss(nn.Module):
 
     def forward(self, preds: torch.Tensor, targets: torch.Tensor):
         return self.bce_weight * self.bce(preds, targets) + self.dice_weight * self.dice(preds, targets)
+# ===== screenshot end: 损失函数设计 =====
 
+# ===== screenshot start: 数据集划分 =====
+# 数据集划分
+# ===== screenshot end: 数据集划分 =====
 def split_dataset(dataset: Dataset, val_split: float, test_split: float, seed: int):
     if val_split + test_split >= 1.0:
         raise ValueError("val_split 和 test_split 之和必须小于 1.0")
@@ -403,6 +442,22 @@ def save_sample_predictions(model, dataset: Dataset, device: torch.device, outpu
             plt.close(fig)
 
 
+# ===== screenshot start: 训练过程 =====
+# 训练过程
+# ===== screenshot start: 训练设置 =====
+# 训练设置
+# ===== screenshot end: 训练设置 =====
+# ===== screenshot start: 过程监控 =====
+# 过程监控
+# ===== screenshot end: 过程监控 =====
+# ===== screenshot start: 早停机制 =====
+# 早停机制
+# ===== screenshot end: 早停机制 =====
+
+# ===== screenshot start: 训练设置 =====
+# 训练设置
+# ===== screenshot end: 训练设置 =====
+
 def train_epoch(model, loader, criterion, optimizer, device, scaler=None, epoch=None):
     model.train()
     total_loss = 0.0
@@ -498,7 +553,6 @@ def save_checkpoint(model, path: str):
 def load_checkpoint(model, path: str, device: torch.device):
     model.load_state_dict(torch.load(path, map_location=device))
 
-#4.运行主程序 
 if __name__ == "__main__":
     args = parse_args()
     fix_seed(args.seed)
@@ -509,10 +563,10 @@ if __name__ == "__main__":
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8")
     print(f"使用设备: {device}")
-    # windows 终端默认编码可能不是 utf-8, 最后一行中文输出乱码时可以启用 utf-8
 
     image_transform, mask_transform = get_transforms(args.image_size, augment=args.augment)
     dataset = ACLDataset(args.img_dir, args.mask_dir, image_transform, mask_transform)
+
     train_dataset, val_dataset, test_dataset = split_dataset(dataset, args.val_split, args.test_split, args.seed)
     train_dataset, val_dataset, test_dataset = limit_datasets(train_dataset, val_dataset, test_dataset)
 
@@ -546,9 +600,21 @@ if __name__ == "__main__":
         f"数据准备完成：训练={len(train_dataset)}，验证={len(val_dataset)}，测试={len(test_dataset) if test_dataset else 0}"
     )
 
+    # ===== screenshot start: 模型搭建 =====
+    # 模型搭建
+    # ===== screenshot end: 模型搭建 =====
+    # ===== screenshot start: 损失函数设计 =====
+    # 损失函数设计
+    # ===== screenshot end: 损失函数设计 =====
     model = StandardUNet().to(device)
     criterion = ComboLoss(0.5, 0.5)
+    # ===== screenshot start: 优化器设计 =====
+    # 优化器设计
+    # ===== screenshot end: 优化器设计 =====
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
+    # ===== screenshot start: 混合精度训练 =====
+    # 混合精度训练
+    # ===== screenshot end: 混合精度训练 =====
     scaler = torch.cuda.amp.GradScaler() if args.use_amp and device.type == "cuda" else None
 
     history = {
@@ -648,6 +714,10 @@ if __name__ == "__main__":
     save_metrics_csv(history, str(output_dir / "training_metrics.csv"))
     print(f"训练指标已保存到 {output_dir / 'training_metrics.csv'}")
 
+    # ===== screenshot start: 预测结果可视化对比 =====
+    # 预测结果可视化对比
+    # ===== screenshot end: 预测结果可视化对比 =====
+
     save_sample_predictions(
         model=best_model if test_loader is not None else model,
         dataset=test_dataset if test_loader is not None else val_dataset,
@@ -656,4 +726,5 @@ if __name__ == "__main__":
         num_samples=min(args.batch_size, 4),
     )
     print(f"预测样本图已保存到 {output_dir / 'sample_predictions'}")
+# ===== screenshot end: 训练过程 =====
 
